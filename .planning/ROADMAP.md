@@ -37,7 +37,7 @@
 
 Plans:
 - [x] 01-01-PLAN.md — Project scaffold + sync.py with all parsing, state, and CLI functions
-- [ ] 01-02-PLAN.md — Pytest test suite for parsing and state management
+- [x] 01-02-PLAN.md — Pytest test suite for parsing and state management
 
 ---
 
