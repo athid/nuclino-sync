@@ -12,7 +12,9 @@ Every note and its attachments land in the right Nuclino collection without manu
 
 ### Validated
 
-(None yet — ship to validate)
+- ✓ Read Apple Notes export directory recursively, filtering versioned snapshots to canonical notes only — Phase 1
+- ✓ Parse YAML frontmatter (`title`, `created`, `modified`) and clean note body (strip duplicate title line) — Phase 1
+- ✓ Atomic state file (`nuclino-state.json`) enabling safe re-runs without duplicate imports — Phase 1
 
 ### Active
 
@@ -69,4 +71,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-21 after initialization*
+*Last updated: 2026-03-21 after Phase 1 (Foundation)*
