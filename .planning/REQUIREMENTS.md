@@ -29,10 +29,10 @@
 
 ### Configuration & UX
 
-- [ ] **CFG-01**: Workspace target configurable via CLI flag (`--workspace`) or env var (`NUCLINO_WORKSPACE_ID` or name)
-- [ ] **CFG-02**: Notes export directory configurable via CLI flag (`--export-dir`) or env var (`NOTES_EXPORT_DIR`), defaults to `~/Desktop/NotesExport`
-- [ ] **CFG-03**: Dry-run mode (`--dry-run`) prints what would be imported without making API calls
-- [ ] **CFG-04**: Each failed item is logged with note path and error message; script continues to next note
+- [x] **CFG-01**: Workspace target configurable via CLI flag (`--workspace`) or env var (`NUCLINO_WORKSPACE_ID` or name)
+- [x] **CFG-02**: Notes export directory configurable via CLI flag (`--export-dir`) or env var (`NOTES_EXPORT_DIR`), defaults to `~/Desktop/NotesExport`
+- [x] **CFG-03**: Dry-run mode (`--dry-run`) prints what would be imported without making API calls
+- [x] **CFG-04**: Each failed item is logged with note path and error message; script continues to next note
 
 ### State & Idempotency
 
@@ -87,10 +87,10 @@
 | API-06 | Phase 2 | Complete |
 | ATT-01 | Phase 3 | Complete |
 | ATT-02 | Phase 3 | Complete |
-| CFG-01 | Phase 3 | Pending |
-| CFG-02 | Phase 3 | Pending |
-| CFG-03 | Phase 3 | Pending |
-| CFG-04 | Phase 3 | Pending |
+| CFG-01 | Phase 3 | Complete |
+| CFG-02 | Phase 3 | Complete |
+| CFG-03 | Phase 3 | Complete |
+| CFG-04 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 20 total
