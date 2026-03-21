@@ -503,6 +503,52 @@ def run_parse_only(export_dir: Path) -> None:
     )
 
 
+# --- Dry-run preview ---
+
+
+def run_dry_run(export_dir: Path) -> None:
+    """Preview what would be imported, without making API calls."""
+    notes, versioned_count = discover_notes(export_dir)
+    state_path = export_dir / "nuclino-state.json"
+    state = load_state(state_path)
+
+    would_import = 0
+    would_skip = 0
+    has_attachments = 0
+
+    for note_file in notes:
+        rel_path = str(note_file.md_path.relative_to(export_dir))
+
+        if rel_path in state["items"] and state["items"][rel_path].get("status") == "imported":
+            would_skip += 1
+            typer.echo(f"  skip (already imported): {note_file.title}")
+            continue
+
+        parsed = parse_note(note_file)
+        body = clean_body(parsed.body, parsed.title)
+
+        if not body.strip():
+            would_skip += 1
+            typer.echo(f"  skip (empty): {note_file.title}")
+            continue
+
+        att_info = ""
+        if note_file.attachment_dir:
+            att_count = sum(1 for f in note_file.attachment_dir.iterdir() if f.is_file())
+            att_info = f" [{att_count} attachments]"
+            has_attachments += 1
+
+        typer.echo(f"  import: {note_file.account}/{note_file.folder}/{note_file.title}{att_info}")
+        would_import += 1
+
+    typer.echo(
+        f"\nDry run: {would_import} notes to import, "
+        f"{would_skip} to skip, "
+        f"{has_attachments} with attachments. "
+        f"{versioned_count} versioned snapshots ignored."
+    )
+
+
 # --- CLI ---
 
 app = typer.Typer()
@@ -520,6 +566,11 @@ def sync(
         "--parse-only",
         help="Parse export and print summary without importing",
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Preview what would be imported without making API calls",
+    ),
     workspace: str = typer.Option(
         None,
         "--workspace",
@@ -530,6 +581,10 @@ def sync(
     """Sync Apple Notes export to Nuclino."""
     if parse_only:
         run_parse_only(export_dir)
+        return
+
+    if dry_run:
+        run_dry_run(export_dir)
         return
 
     # API key from env (required for import)

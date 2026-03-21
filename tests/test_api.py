@@ -14,6 +14,7 @@ from sync import (
     ensure_collection,
     make_nuclino_client,
     resolve_workspace,
+    run_dry_run,
     run_import,
     upload_attachments,
 )
@@ -502,3 +503,66 @@ class TestUploadAttachments:
 
         # Verify it used files= parameter (multipart)
         assert "files" in post_call[1]
+
+
+# --- Dry-run mode (CFG-03) ---
+
+
+class TestDryRun:
+    def test_dry_run_output(self, sample_export, capsys):
+        """Dry-run prints per-note import plan with folder and attachment count."""
+        run_dry_run(sample_export)
+        output = capsys.readouterr().out
+
+        # Should list the two canonical notes with content
+        assert "iCloud/Notes/Note" in output
+        assert "iCloud/Notes/My-Note" in output
+        # Empty note should be skipped, not listed as "import:"
+        assert "import:" in output
+        # Note has a sibling attachment dir with 1 file
+        assert "[1 attachments]" in output
+
+    def test_dry_run_summary(self, sample_export, capsys):
+        """Dry-run ends with summary count line."""
+        run_dry_run(sample_export)
+        output = capsys.readouterr().out
+
+        # Summary line with counts
+        assert "Dry run:" in output
+        assert "to import" in output
+        assert "to skip" in output
+        assert "with attachments" in output
+        assert "versioned snapshots ignored" in output
+
+    def test_dry_run_no_api_key(self, sample_export, monkeypatch):
+        """--dry-run works without NUCLINO_API_KEY set."""
+        from typer.testing import CliRunner
+        from sync import app
+
+        monkeypatch.delenv("NUCLINO_API_KEY", raising=False)
+        runner = CliRunner()
+        result = runner.invoke(app, ["--dry-run", "--export-dir", str(sample_export)])
+        assert result.exit_code == 0
+        assert "Dry run:" in result.output
+
+    def test_dry_run_skips_already_imported(self, sample_export, capsys):
+        """Dry-run shows 'skip (already imported)' for notes in state."""
+        import json
+
+        state_path = sample_export / "nuclino-state.json"
+        state = {
+            "version": 1,
+            "items": {
+                "iCloud/Notes/Note.md": {
+                    "status": "imported",
+                    "title": "Note",
+                    "nuclino_item_id": "existing-id",
+                },
+            },
+        }
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+
+        run_dry_run(sample_export)
+        output = capsys.readouterr().out
+
+        assert "skip (already imported): Note" in output
