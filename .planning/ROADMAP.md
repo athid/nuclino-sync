@@ -11,7 +11,7 @@
 
 - [ ] **Phase 1: Foundation** — Parse Apple Notes export into validated in-memory notes; state management for idempotency
 - [x] **Phase 2: Import Core** — Nuclino API client with backoff; workspace/collection resolution; note item creation with metadata footer (completed 2026-03-21)
-- [ ] **Phase 3: Attachments & CLI** — File upload to Nuclino; CLI flags and env var config; per-item error isolation
+- [x] **Phase 3: Attachments & CLI** — File upload to Nuclino; CLI flags and env var config; per-item error isolation (completed 2026-03-21)
 - [ ] **Phase 4: Hardening** — Dry-run output polish; edge case handling; README with usage examples
 
 ---
@@ -74,7 +74,7 @@ Plans:
 3. `--workspace`, `--export-dir`, and `--dry-run` flags are accepted; each has a corresponding env var fallback
 4. Every failed note is logged with its source path and error message; the script processes all remaining notes after any single failure
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 03-01-PLAN.md — Attachment upload function with per-file error isolation and run_import integration
@@ -106,7 +106,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Foundation | 0/2 | Planned | - |
 | 2. Import Core | 0/? | Complete    | 2026-03-21 |
-| 3. Attachments & CLI | 0/2 | Planned | - |
+| 3. Attachments & CLI | 0/2 | Complete    | 2026-03-21 |
 | 4. Hardening | 0/? | Not started | - |
 
 ---
