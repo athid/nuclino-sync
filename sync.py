@@ -3,18 +3,25 @@
 import json
 import os
 import re
+import time
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 import frontmatter
+import httpx
 import typer
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
 # --- Constants ---
 
 VERSION_SUFFIX = re.compile(r"-\d+$")
 APPLE_DATE_FMT = "%A, %d %B %Y at %H:%M:%S"
+NUCLINO_BASE = "https://api.nuclino.com"
+THROTTLE_DELAY = 0.35  # ~170 req/min, safely under 150/min limit
+
+_last_request_time = 0.0
 
 # --- Data classes ---
 
@@ -119,6 +126,61 @@ def clean_body(body: str, title: str) -> str:
     if lines and lines[0].strip() == title:
         return "\n".join(lines[1:]).lstrip("\n")
     return body
+
+
+# --- Nuclino API ---
+
+
+def build_metadata_footer(created: datetime | None, modified: datetime | None) -> str:
+    """Build HTML comment metadata footer. Returns empty string if no data."""
+    if created is None and modified is None:
+        return ""
+    lines = ["<!-- nuclino-sync"]
+    if created is not None:
+        lines.append(f"created: {created.isoformat()}")
+    if modified is not None:
+        lines.append(f"modified: {modified.isoformat()}")
+    lines.append("-->")
+    return "\n" + "\n".join(lines)
+
+
+def _throttle() -> None:
+    """Ensure minimum delay between API requests."""
+    global _last_request_time
+    elapsed = time.monotonic() - _last_request_time
+    if elapsed < THROTTLE_DELAY:
+        time.sleep(THROTTLE_DELAY - elapsed)
+    _last_request_time = time.monotonic()
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """Return True if exception is a retryable HTTP status error."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in (429, 500, 502, 503)
+    return False
+
+
+@retry(
+    reraise=True,
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    retry=retry_if_exception(_is_retryable),
+)
+def api_request(client: httpx.Client, method: str, path: str, **kwargs) -> dict:
+    """Make a throttled, retried API request. Returns response data dict."""
+    _throttle()
+    resp = client.request(method, f"{NUCLINO_BASE}{path}", **kwargs)
+    resp.raise_for_status()
+    body = resp.json()
+    return body["data"]
+
+
+def make_nuclino_client(api_key: str) -> httpx.Client:
+    """Create an httpx Client configured for the Nuclino API."""
+    return httpx.Client(
+        headers={"Authorization": api_key, "Content-Type": "application/json"},
+        timeout=httpx.Timeout(connect=5.0, read=30.0, write=30.0, pool=5.0),
+    )
 
 
 # --- State management ---

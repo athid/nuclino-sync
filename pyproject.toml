@@ -6,6 +6,8 @@ dependencies = [
     "python-frontmatter>=1.1",
     "typer>=0.12",
     "rich>=13",
+    "httpx>=0.28",
+    "tenacity>=9.0",
 ]
 
 [project.optional-dependencies]
