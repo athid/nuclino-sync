@@ -1,0 +1,8 @@
+nuclino-state.json
+nuclino-state.json.tmp
+.env
+__pycache__/
+*.pyc
+.venv/
+dist/
+*.egg-info/
