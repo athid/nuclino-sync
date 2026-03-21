@@ -23,6 +23,7 @@ NUCLINO_BASE = "https://api.nuclino.com"
 THROTTLE_DELAY = 0.35  # ~170 req/min, safely under 150/min limit
 
 _last_request_time = 0.0
+_upload_not_supported = False
 
 # --- Data classes ---
 
@@ -248,6 +249,74 @@ def ensure_collection(
     return state["collections"][folder_key]
 
 
+# --- Attachment upload ---
+
+
+def upload_attachments(
+    client: httpx.Client,
+    item_id: str,
+    attachment_dir: Path,
+    state_entry: dict,
+    state: dict,
+    state_path: Path,
+) -> None:
+    """Upload attachments for an item. Failures are isolated per-file."""
+    global _upload_not_supported
+    if _upload_not_supported:
+        return
+
+    attachment_failures: list[dict] = []
+    attachment_links: list[str] = []
+
+    for file_path in sorted(attachment_dir.iterdir()):
+        if not file_path.is_file():
+            continue
+        try:
+            with open(file_path, "rb") as f:
+                _throttle()
+                resp = client.post(
+                    f"{NUCLINO_BASE}/v0/files",
+                    data={"itemId": item_id},
+                    files={"file": (file_path.name, f)},
+                    headers={"Content-Type": None},
+                )
+                if resp.status_code in (404, 405):
+                    _upload_not_supported = True
+                    typer.echo(
+                        "Warning: File upload not supported by Nuclino API. "
+                        "Skipping all attachment uploads."
+                    )
+                    return
+                resp.raise_for_status()
+                file_data = resp.json()["data"]
+
+            file_id = file_data.get("id", "")
+            file_name = file_path.name
+            permanent_url = f"https://files.nuclino.com/files/{file_id}/{file_name}"
+
+            if file_name.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg")):
+                attachment_links.append(f"![{file_name}]({permanent_url})")
+            else:
+                attachment_links.append(f"[{file_name}]({permanent_url})")
+
+        except Exception as e:
+            attachment_failures.append({"file": file_path.name, "error": str(e)})
+
+    # Update item content with attachment links (GET then PUT)
+    if attachment_links:
+        item_data = api_request(client, "GET", f"/v0/items/{item_id}")
+        current_content = item_data.get("content", "")
+        links_block = "\n\n" + "\n".join(attachment_links)
+        api_request(client, "PUT", f"/v0/items/{item_id}", json={
+            "content": current_content + links_block,
+        })
+
+    # Record failures in state
+    if attachment_failures:
+        state_entry["attachment_failures"] = attachment_failures
+        save_state(state, state_path)
+
+
 # --- State management ---
 
 
@@ -340,6 +409,21 @@ def run_import(
                 }
                 save_state(state, state_path)
                 imported += 1
+
+                # Upload attachments if any exist (separate error boundary)
+                if note_file.attachment_dir:
+                    try:
+                        upload_attachments(
+                            client, data["id"],
+                            note_file.attachment_dir,
+                            state["items"][rel_path],
+                            state, state_path,
+                        )
+                    except Exception as e:
+                        state["items"][rel_path].setdefault(
+                            "attachment_failures", []
+                        ).append({"file": "*", "error": f"Unexpected: {str(e)}"})
+                        save_state(state, state_path)
 
             except Exception as e:
                 # Record failure in state (D-08)

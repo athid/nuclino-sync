@@ -1,4 +1,4 @@
-"""Tests for Phase 2 API functions: metadata footer, client, workspace resolution, collections, import."""
+"""Tests for API functions: metadata footer, client, workspace resolution, collections, import, attachments."""
 
 import json
 from datetime import datetime
@@ -15,6 +15,7 @@ from sync import (
     make_nuclino_client,
     resolve_workspace,
     run_import,
+    upload_attachments,
 )
 
 
@@ -279,3 +280,225 @@ class TestRunImport:
         # and 1 empty note (Empty.md) which is skipped
         assert "Imported 2 notes." in output
         assert "0 failed." in output
+
+
+# --- Attachment upload ---
+
+
+class TestUploadAttachments:
+    """Tests for upload_attachments function (ATT-01, ATT-02)."""
+
+    @patch("sync.save_state")
+    @patch("sync.api_request")
+    def test_upload_success_image_and_file(self, mock_api, mock_save, tmp_path):
+        """Test 1: Uploads each file via POST, appends Markdown links via GET+PUT."""
+        import sync
+
+        sync._upload_not_supported = False
+
+        att_dir = tmp_path / "attachments"
+        att_dir.mkdir()
+        (att_dir / "image.png").write_bytes(b"\x89PNG fake")
+        (att_dir / "readme.pdf").write_bytes(b"%PDF fake")
+
+        client = MagicMock()
+        # Mock client.post for file uploads
+        mock_resp1 = MagicMock()
+        mock_resp1.status_code = 200
+        mock_resp1.json.return_value = {"data": {"id": "file-1"}}
+        mock_resp2 = MagicMock()
+        mock_resp2.status_code = 200
+        mock_resp2.json.return_value = {"data": {"id": "file-2"}}
+        client.post.side_effect = [mock_resp1, mock_resp2]
+
+        # Mock api_request for GET (current content) and PUT (update)
+        mock_api.side_effect = [
+            {"content": "Original body"},  # GET item
+            {},  # PUT item
+        ]
+
+        state_entry = {"status": "imported"}
+        state = {"items": {"note.md": state_entry}}
+        state_path = tmp_path / "state.json"
+
+        upload_attachments(client, "item-1", att_dir, state_entry, state, state_path)
+
+        # Verify client.post was called twice (once per file)
+        assert client.post.call_count == 2
+
+        # Verify Content-Type: None was passed to override default
+        for post_call in client.post.call_args_list:
+            assert post_call[1]["headers"] == {"Content-Type": None}
+
+        # Verify GET+PUT for content update
+        assert mock_api.call_count == 2
+        get_call = mock_api.call_args_list[0]
+        assert get_call[0][1] == "GET"
+        assert "item-1" in get_call[0][2]
+
+        put_call = mock_api.call_args_list[1]
+        assert put_call[0][1] == "PUT"
+        content = put_call[1]["json"]["content"]
+        assert "Original body" in content
+        # image.png should use ![name](url) syntax
+        assert "![image.png]" in content
+        # readme.pdf should use [name](url) syntax
+        assert "[readme.pdf]" in content
+        assert "![readme.pdf]" not in content
+
+    @patch("sync.save_state")
+    @patch("sync.api_request")
+    def test_per_file_failure_isolation(self, mock_api, mock_save, tmp_path):
+        """Test 2: One file fails, others still upload and get linked."""
+        import sync
+
+        sync._upload_not_supported = False
+
+        att_dir = tmp_path / "attachments"
+        att_dir.mkdir()
+        (att_dir / "bad.png").write_bytes(b"bad")
+        (att_dir / "good.jpg").write_bytes(b"good")
+
+        client = MagicMock()
+        # First file fails, second succeeds
+        mock_resp_fail = MagicMock()
+        mock_resp_fail.status_code = 500
+        mock_resp_fail.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "Server error", request=MagicMock(), response=mock_resp_fail,
+        )
+        mock_resp_ok = MagicMock()
+        mock_resp_ok.status_code = 200
+        mock_resp_ok.json.return_value = {"data": {"id": "file-ok"}}
+        client.post.side_effect = [mock_resp_fail, mock_resp_ok]
+
+        # GET+PUT for the one successful file
+        mock_api.side_effect = [
+            {"content": "Body"},
+            {},
+        ]
+
+        state_entry = {"status": "imported"}
+        state = {"items": {"note.md": state_entry}}
+        state_path = tmp_path / "state.json"
+
+        upload_attachments(client, "item-1", att_dir, state_entry, state, state_path)
+
+        # Verify failure was recorded
+        assert "attachment_failures" in state_entry
+        assert len(state_entry["attachment_failures"]) == 1
+        assert state_entry["attachment_failures"][0]["file"] == "bad.png"
+
+        # Verify the successful file was still linked
+        put_call = mock_api.call_args_list[1]
+        content = put_call[1]["json"]["content"]
+        assert "![good.jpg]" in content
+
+        # Verify state was saved (for failure recording)
+        mock_save.assert_called()
+
+    @patch("sync.save_state")
+    @patch("sync.api_request")
+    def test_404_skip_all(self, mock_api, mock_save, tmp_path):
+        """Test 3: 404 on first POST sets flag and skips all remaining uploads."""
+        import sync
+
+        sync._upload_not_supported = False
+
+        att_dir = tmp_path / "attachments"
+        att_dir.mkdir()
+        (att_dir / "file1.png").write_bytes(b"data1")
+        (att_dir / "file2.png").write_bytes(b"data2")
+
+        client = MagicMock()
+        mock_resp_404 = MagicMock()
+        mock_resp_404.status_code = 404
+        client.post.return_value = mock_resp_404
+
+        state_entry = {"status": "imported"}
+        state = {"items": {"note.md": state_entry}}
+        state_path = tmp_path / "state.json"
+
+        upload_attachments(client, "item-1", att_dir, state_entry, state, state_path)
+
+        # Flag should be set
+        assert sync._upload_not_supported is True
+
+        # Only 1 POST call (returned early after 404)
+        assert client.post.call_count == 1
+
+        # No GET/PUT calls (no content update)
+        mock_api.assert_not_called()
+
+        # Second call should return immediately due to flag
+        client.post.reset_mock()
+        att_dir2 = tmp_path / "att2"
+        att_dir2.mkdir()
+        (att_dir2 / "file3.png").write_bytes(b"data3")
+
+        upload_attachments(client, "item-2", att_dir2, {}, state, state_path)
+        client.post.assert_not_called()
+
+        # Reset flag for other tests
+        sync._upload_not_supported = False
+
+    @patch("sync.upload_attachments")
+    @patch("sync.save_state")
+    @patch("sync.api_request")
+    def test_run_import_with_attachment_dir(self, mock_api, mock_save, mock_upload, sample_export):
+        """Test 4: run_import calls upload_attachments AFTER state save for notes with attachments."""
+        call_count = [0]
+
+        def api_side_effect(client, method, path, **kwargs):
+            call_count[0] += 1
+            return {"id": f"item-{call_count[0]}"}
+
+        mock_api.side_effect = api_side_effect
+
+        client = MagicMock()
+        run_import(sample_export, "ws-1", client)
+
+        # upload_attachments should have been called for Note.md (which has attachment_dir)
+        assert mock_upload.call_count >= 1
+
+        # Verify it was called with the right item_id and attachment_dir
+        upload_call = mock_upload.call_args_list[0]
+        # First positional args: client, item_id, attachment_dir, state_entry, state, state_path
+        assert upload_call[0][0] is client  # client
+        assert isinstance(upload_call[0][2], Path)  # attachment_dir
+        assert upload_call[0][2].name == "Note"  # attachment dir for Note.md
+
+    @patch("sync.save_state")
+    @patch("sync.api_request")
+    def test_content_type_override(self, mock_api, mock_save, tmp_path):
+        """Test 5: POST /v0/files passes Content-Type: None to override client default."""
+        import sync
+
+        sync._upload_not_supported = False
+
+        att_dir = tmp_path / "attachments"
+        att_dir.mkdir()
+        (att_dir / "doc.txt").write_bytes(b"hello")
+
+        client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"data": {"id": "file-1"}}
+        client.post.return_value = mock_resp
+
+        mock_api.side_effect = [
+            {"content": "Body"},
+            {},
+        ]
+
+        state_entry = {"status": "imported"}
+        state = {"items": {"note.md": state_entry}}
+        state_path = tmp_path / "state.json"
+
+        upload_attachments(client, "item-1", att_dir, state_entry, state, state_path)
+
+        # Verify Content-Type: None was passed
+        post_call = client.post.call_args
+        assert post_call[1]["headers"] == {"Content-Type": None}
+
+        # Verify it used files= parameter (multipart)
+        assert "files" in post_call[1]
