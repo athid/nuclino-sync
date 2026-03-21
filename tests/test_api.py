@@ -277,9 +277,9 @@ class TestRunImport:
         run_import(sample_export, "ws-1", client)
 
         output = capsys.readouterr().out
-        # sample_export has 2 canonical notes with content (Note.md, My-Note.md)
-        # and 1 empty note (Empty.md) which is skipped
-        assert "Imported 2 notes." in output
+        # sample_export has 3 canonical notes: Note.md, My-Note.md, Empty.md
+        # Empty.md now gets imported with placeholder instead of being skipped
+        assert "Imported 3 notes." in output
         assert "0 failed." in output
 
 

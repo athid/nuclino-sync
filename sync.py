@@ -24,6 +24,16 @@ THROTTLE_DELAY = 0.35  # ~170 req/min, safely under 150/min limit
 
 _last_request_time = 0.0
 _upload_not_supported = False
+_sanitized_warnings: set[str] = set()
+
+
+def sanitize_collection_name(name: str) -> str:
+    """Sanitize collection name for Nuclino API: replace / and &, strip control chars."""
+    name = name.replace("/", " - ")
+    name = name.replace("&", "and")
+    # Strip control characters (Unicode category starting with "C")
+    name = "".join(ch for ch in name if not unicodedata.category(ch).startswith("C"))
+    return name.strip()
 
 # --- Data classes ---
 
@@ -223,12 +233,17 @@ def ensure_collection(
 ) -> str:
     """Return collection ID, creating if needed. Idempotent via state."""
     # Account-level collection (top-level in workspace)
-    acct_key = account
+    acct_key = account  # Original name for state key (idempotency)
+    sanitized_account = sanitize_collection_name(account)
+    if sanitized_account != account and account not in _sanitized_warnings:
+        _sanitized_warnings.add(account)
+        typer.echo(f"Warning: collection name sanitized: '{account}' \u2192 '{sanitized_account}'")
+
     if acct_key not in state.get("collections", {}):
         data = api_request(client, "POST", "/v0/items", json={
             "workspaceId": workspace_id,
             "object": "collection",
-            "title": account,
+            "title": sanitized_account,
         })
         state.setdefault("collections", {})[acct_key] = data["id"]
         save_state(state, state_path)
@@ -236,12 +251,17 @@ def ensure_collection(
     acct_collection_id = state["collections"][acct_key]
 
     # Folder-level collection (nested under account)
-    folder_key = f"{account}/{folder}"
+    folder_key = f"{account}/{folder}"  # Original name for state key (idempotency)
+    sanitized_folder = sanitize_collection_name(folder)
+    if sanitized_folder != folder and folder not in _sanitized_warnings:
+        _sanitized_warnings.add(folder)
+        typer.echo(f"Warning: collection name sanitized: '{folder}' \u2192 '{sanitized_folder}'")
+
     if folder_key not in state.get("collections", {}):
         data = api_request(client, "POST", "/v0/items", json={
             "parentId": acct_collection_id,
             "object": "collection",
-            "title": folder,
+            "title": sanitized_folder,
         })
         state["collections"][folder_key] = data["id"]
         save_state(state, state_path)
@@ -371,16 +391,9 @@ def run_import(
                 parsed = parse_note(note_file)
                 body = clean_body(parsed.body, parsed.title)
 
-                # Skip empty notes
+                # Empty notes get placeholder body instead of being skipped
                 if not body.strip():
-                    if rel_path not in state["items"]:
-                        state["items"][rel_path] = {
-                            "status": "skipped_empty",
-                            "title": parsed.title,
-                        }
-                        save_state(state, state_path)
-                    progress.advance(task)
-                    continue
+                    body = "*(empty note)*"
 
                 footer = build_metadata_footer(parsed.created, parsed.modified)
                 content = body + footer
@@ -523,6 +536,47 @@ def run_dry_run(export_dir: Path) -> None:
     state_path = export_dir / "nuclino-state.json"
     state = load_state(state_path)
 
+    # Pre-flight summary: scan all notes for counts and metadata
+    total_notes = len(notes)
+    already_imported = 0
+    notes_with_attachments = 0
+    empty_notes = 0
+    all_frontmatter_keys: set[str] = set()
+
+    for note_file in notes:
+        rel_path = str(note_file.md_path.relative_to(export_dir))
+
+        if rel_path in state["items"] and state["items"][rel_path].get("status") == "imported":
+            already_imported += 1
+            continue
+
+        parsed = parse_note(note_file)
+        body = clean_body(parsed.body, parsed.title)
+
+        if not body.strip():
+            empty_notes += 1
+
+        if note_file.attachment_dir:
+            notes_with_attachments += 1
+
+        # Collect frontmatter keys
+        post = frontmatter.load(str(note_file.md_path))
+        all_frontmatter_keys.update(post.metadata.keys())
+
+    # Determine lost fields (keys not mapped to footer)
+    mapped_keys = {"title", "created", "modified"}
+    lost_keys = all_frontmatter_keys - mapped_keys
+    lost_fields = ", ".join(sorted(lost_keys)) if lost_keys else "none"
+
+    typer.echo("Pre-flight summary:")
+    typer.echo(f"  Notes to import:    {total_notes - already_imported}")
+    typer.echo(f"  Notes to skip:      {already_imported} (already imported)")
+    typer.echo(f"  Attachments:        {notes_with_attachments} notes have attachments")
+    typer.echo(f"  Metadata footer:    created, modified will be appended as HTML comment")
+    typer.echo(f"  Lost fields:        {lost_fields}")
+    typer.echo("")
+
+    # Per-note detail lines
     would_import = 0
     would_skip = 0
     has_attachments = 0
@@ -539,8 +593,10 @@ def run_dry_run(export_dir: Path) -> None:
         body = clean_body(parsed.body, parsed.title)
 
         if not body.strip():
-            would_skip += 1
-            typer.echo(f"  skip (empty): {note_file.title}")
+            typer.echo(f"  import (empty \u2192 placeholder): {note_file.title}")
+            would_import += 1
+            if note_file.attachment_dir:
+                has_attachments += 1
             continue
 
         att_info = ""
