@@ -71,4 +71,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-21 after Phase 3 (Attachments & CLI) — attachment upload with 404 degradation, --dry-run flag, post-run failure summary, 63 tests passing*
+*Last updated: 2026-03-21 after Phase 4 (Hardening) — collection name sanitization, empty note placeholder, dry-run pre-flight summary, README, 74 tests passing. v1.0 milestone COMPLETE.*
