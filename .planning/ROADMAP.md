@@ -100,7 +100,7 @@ Plans:
 
 Plans:
 - [ ] 04-01-PLAN.md — Hardening code changes: dry-run pre-flight summary, empty note placeholder import, collection name sanitization + tests
-- [ ] 04-02-PLAN.md — README.md with minimal working example
+- [x] 04-02-PLAN.md — README.md with minimal working example
 
 ---
 
