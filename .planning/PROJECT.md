@@ -71,4 +71,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-21 after Phase 1 (Foundation)*
+*Last updated: 2026-03-21 after Phase 2 (Import Core) — API client, throttled requests, idempotent collections, import loop, 53 tests passing*
