@@ -12,6 +12,7 @@ from pathlib import Path
 import frontmatter
 import httpx
 import typer
+from rich.progress import Progress
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
 # --- Constants ---
@@ -211,6 +212,42 @@ def resolve_workspace(client: httpx.Client, workspace_arg: str) -> str:
     raise typer.BadParameter(f"Invalid choice: {choice}")
 
 
+def ensure_collection(
+    client: httpx.Client,
+    workspace_id: str,
+    account: str,
+    folder: str,
+    state: dict,
+    state_path: Path,
+) -> str:
+    """Return collection ID, creating if needed. Idempotent via state."""
+    # Account-level collection (top-level in workspace)
+    acct_key = account
+    if acct_key not in state.get("collections", {}):
+        data = api_request(client, "POST", "/v0/items", json={
+            "workspaceId": workspace_id,
+            "object": "collection",
+            "title": account,
+        })
+        state.setdefault("collections", {})[acct_key] = data["id"]
+        save_state(state, state_path)
+
+    acct_collection_id = state["collections"][acct_key]
+
+    # Folder-level collection (nested under account)
+    folder_key = f"{account}/{folder}"
+    if folder_key not in state.get("collections", {}):
+        data = api_request(client, "POST", "/v0/items", json={
+            "parentId": acct_collection_id,
+            "object": "collection",
+            "title": folder,
+        })
+        state["collections"][folder_key] = data["id"]
+        save_state(state, state_path)
+
+    return state["collections"][folder_key]
+
+
 # --- State management ---
 
 
@@ -232,6 +269,95 @@ def save_state(state: dict, state_path: Path) -> None:
         json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8"
     )
     os.replace(str(tmp), str(state_path))
+
+
+# --- Import ---
+
+
+def run_import(
+    export_dir: Path,
+    workspace_id: str,
+    client: httpx.Client,
+) -> None:
+    """Import all notes to Nuclino with progress bar."""
+    state_path = export_dir / "nuclino-state.json"
+    state = load_state(state_path)
+    state["workspace_id"] = workspace_id
+
+    notes, _ = discover_notes(export_dir)
+    imported = 0
+    failed = 0
+
+    with Progress() as progress:
+        task = progress.add_task("Importing notes...", total=len(notes))
+        for note_file in notes:
+            rel_path = str(note_file.md_path.relative_to(export_dir))
+
+            # Skip already-imported items (idempotent)
+            if rel_path in state["items"] and state["items"][rel_path].get("status") == "imported":
+                progress.advance(task)
+                continue
+
+            try:
+                parsed = parse_note(note_file)
+                body = clean_body(parsed.body, parsed.title)
+
+                # Skip empty notes
+                if not body.strip():
+                    if rel_path not in state["items"]:
+                        state["items"][rel_path] = {
+                            "status": "skipped_empty",
+                            "title": parsed.title,
+                        }
+                        save_state(state, state_path)
+                    progress.advance(task)
+                    continue
+
+                footer = build_metadata_footer(parsed.created, parsed.modified)
+                content = body + footer
+
+                collection_id = ensure_collection(
+                    client, workspace_id,
+                    note_file.account, note_file.folder,
+                    state, state_path,
+                )
+
+                data = api_request(client, "POST", "/v0/items", json={
+                    "parentId": collection_id,
+                    "object": "item",
+                    "title": parsed.title,
+                    "content": content,
+                })
+
+                # Write state IMMEDIATELY after item creation (Pitfall 5)
+                state["items"][rel_path] = {
+                    "status": "imported",
+                    "title": parsed.title,
+                    "nuclino_item_id": data["id"],
+                    "nuclino_collection_id": collection_id,
+                    "created": parsed.created.isoformat() if parsed.created else None,
+                    "modified": parsed.modified.isoformat() if parsed.modified else None,
+                }
+                save_state(state, state_path)
+                imported += 1
+
+            except Exception as e:
+                # Record failure in state (D-08)
+                state["items"][rel_path] = {
+                    "status": "failed",
+                    "title": note_file.title,
+                    "error": str(e),
+                }
+                save_state(state, state_path)
+                failed += 1
+
+            progress.advance(task)
+
+    # Summary line (D-07)
+    typer.echo(
+        f"Imported {imported} notes. {failed} failed. "
+        f"See nuclino-state.json for details."
+    )
 
 
 # --- Parse-only command ---
@@ -336,7 +462,7 @@ def sync(
 
     client = make_nuclino_client(api_key)
     workspace_id = resolve_workspace(client, workspace)
-    typer.echo(f"Import not yet implemented (Phase 2 Plan 02). Workspace: {workspace_id}")
+    run_import(export_dir, workspace_id, client)
 
 
 if __name__ == "__main__":
