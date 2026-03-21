@@ -74,7 +74,11 @@ Plans:
 3. `--workspace`, `--export-dir`, and `--dry-run` flags are accepted; each has a corresponding env var fallback
 4. Every failed note is logged with its source path and error message; the script processes all remaining notes after any single failure
 
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Attachment upload function with per-file error isolation and run_import integration
+- [ ] 03-02-PLAN.md — --dry-run CLI flag and post-run failure summary
 
 ---
 
@@ -102,7 +106,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Foundation | 0/2 | Planned | - |
 | 2. Import Core | 0/? | Complete    | 2026-03-21 |
-| 3. Attachments & CLI | 0/? | Not started | - |
+| 3. Attachments & CLI | 0/2 | Planned | - |
 | 4. Hardening | 0/? | Not started | - |
 
 ---
@@ -154,4 +158,4 @@ Reference: https://help.nuclino.com/d3a29686-api
 ---
 
 *Roadmap created: 2026-03-21*
-*Last updated: 2026-03-21 after Phase 1 planning*
+*Last updated: 2026-03-21 after Phase 3 planning*
