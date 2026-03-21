@@ -10,7 +10,7 @@
 ## Phases
 
 - [ ] **Phase 1: Foundation** — Parse Apple Notes export into validated in-memory notes; state management for idempotency
-- [ ] **Phase 2: Import Core** — Nuclino API client with backoff; workspace/collection resolution; note item creation with metadata footer
+- [x] **Phase 2: Import Core** — Nuclino API client with backoff; workspace/collection resolution; note item creation with metadata footer (completed 2026-03-21)
 - [ ] **Phase 3: Attachments & CLI** — File upload to Nuclino; CLI flags and env var config; per-item error isolation
 - [ ] **Phase 4: Hardening** — Dry-run output polish; edge case handling; README with usage examples
 
@@ -101,7 +101,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 0/2 | Planned | - |
-| 2. Import Core | 0/? | Not started | - |
+| 2. Import Core | 0/? | Complete    | 2026-03-21 |
 | 3. Attachments & CLI | 0/? | Not started | - |
 | 4. Hardening | 0/? | Not started | - |
 
