@@ -24,8 +24,8 @@
 
 ### Attachments
 
-- [ ] **ATT-01**: Script uploads each attachment file and links it to the parent item
-- [ ] **ATT-02**: Attachment failures are logged as warnings and do not fail the parent note import
+- [x] **ATT-01**: Script uploads each attachment file and links it to the parent item
+- [x] **ATT-02**: Attachment failures are logged as warnings and do not fail the parent note import
 
 ### Configuration & UX
 
@@ -85,8 +85,8 @@
 | API-04 | Phase 2 | Complete |
 | API-05 | Phase 2 | Complete |
 | API-06 | Phase 2 | Complete |
-| ATT-01 | Phase 3 | Pending |
-| ATT-02 | Phase 3 | Pending |
+| ATT-01 | Phase 3 | Complete |
+| ATT-02 | Phase 3 | Complete |
 | CFG-01 | Phase 3 | Pending |
 | CFG-02 | Phase 3 | Pending |
 | CFG-03 | Phase 3 | Pending |

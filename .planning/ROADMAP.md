@@ -77,7 +77,7 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Attachment upload function with per-file error isolation and run_import integration
+- [x] 03-01-PLAN.md — Attachment upload function with per-file error isolation and run_import integration
 - [ ] 03-02-PLAN.md — --dry-run CLI flag and post-run failure summary
 
 ---
