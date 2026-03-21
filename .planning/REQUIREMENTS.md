@@ -7,11 +7,11 @@
 
 ### Export Parsing
 
-- [ ] **PARSE-01**: Script filters versioned snapshot files and only processes canonical notes (filename pattern: files without version-suffix; ~39 canonical from 133 total in reference export)
-- [ ] **PARSE-02**: Script strips duplicate title line from note body when first line matches frontmatter `title` field (affects ~81% of notes)
-- [ ] **PARSE-03**: Script parses human-readable date format from frontmatter (`Thursday, 12 September 2024 at 07:24:45`) into a datetime object
-- [ ] **PARSE-04**: Script extracts all frontmatter fields (`title`, `created`, `modified`) and note body from each `.md` file
-- [ ] **PARSE-05**: Script discovers attachment files from sibling directory (`<Note Title>/`) alongside each note
+- [x] **PARSE-01**: Script filters versioned snapshot files and only processes canonical notes (filename pattern: files without version-suffix; ~39 canonical from 133 total in reference export)
+- [x] **PARSE-02**: Script strips duplicate title line from note body when first line matches frontmatter `title` field (affects ~81% of notes)
+- [x] **PARSE-03**: Script parses human-readable date format from frontmatter (`Thursday, 12 September 2024 at 07:24:45`) into a datetime object
+- [x] **PARSE-04**: Script extracts all frontmatter fields (`title`, `created`, `modified`) and note body from each `.md` file
+- [x] **PARSE-05**: Script discovers attachment files from sibling directory (`<Note Title>/`) alongside each note
 
 ### Nuclino API Client
 
@@ -36,9 +36,9 @@
 
 ### State & Idempotency
 
-- [ ] **STATE-01**: Script writes a state file tracking which collections and items have been created (keyed on source path)
-- [ ] **STATE-02**: Re-running the script skips already-imported items (idempotent)
-- [ ] **STATE-03**: State file is written atomically (tmp + rename) to survive interruption mid-run
+- [x] **STATE-01**: Script writes a state file tracking which collections and items have been created (keyed on source path)
+- [x] **STATE-02**: Re-running the script skips already-imported items (idempotent)
+- [x] **STATE-03**: State file is written atomically (tmp + rename) to survive interruption mid-run
 
 ## v2 Requirements
 
@@ -71,14 +71,14 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PARSE-01 | Phase 1 | Pending |
-| PARSE-02 | Phase 1 | Pending |
-| PARSE-03 | Phase 1 | Pending |
-| PARSE-04 | Phase 1 | Pending |
-| PARSE-05 | Phase 1 | Pending |
-| STATE-01 | Phase 1 | Pending |
-| STATE-02 | Phase 1 | Pending |
-| STATE-03 | Phase 1 | Pending |
+| PARSE-01 | Phase 1 | Complete |
+| PARSE-02 | Phase 1 | Complete |
+| PARSE-03 | Phase 1 | Complete |
+| PARSE-04 | Phase 1 | Complete |
+| PARSE-05 | Phase 1 | Complete |
+| STATE-01 | Phase 1 | Complete |
+| STATE-02 | Phase 1 | Complete |
+| STATE-03 | Phase 1 | Complete |
 | API-01 | Phase 2 | Pending |
 | API-02 | Phase 2 | Pending |
 | API-03 | Phase 2 | Pending |
