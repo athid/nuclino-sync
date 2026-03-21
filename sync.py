@@ -183,6 +183,34 @@ def make_nuclino_client(api_key: str) -> httpx.Client:
     )
 
 
+def resolve_workspace(client: httpx.Client, workspace_arg: str) -> str:
+    """Resolve workspace name or ID to workspace ID."""
+    data = api_request(client, "GET", "/v0/workspaces")
+    workspaces = data.get("results", [])
+
+    # Try exact ID match first
+    for ws in workspaces:
+        if ws["id"] == workspace_arg:
+            return ws["id"]
+
+    # Try case-insensitive name match (D-11)
+    for ws in workspaces:
+        if ws["name"].lower() == workspace_arg.lower():
+            return ws["id"]
+
+    # Interactive fallback (D-10)
+    if not workspaces:
+        raise typer.BadParameter("No workspaces found for this API key.")
+
+    typer.echo(f"No workspace '{workspace_arg}' found. Available:")
+    for i, ws in enumerate(workspaces, 1):
+        typer.echo(f"  {i}. {ws['name']}")
+    choice = typer.prompt("Which one? (Ctrl+C to cancel)", type=int)
+    if 1 <= choice <= len(workspaces):
+        return workspaces[choice - 1]["id"]
+    raise typer.BadParameter(f"Invalid choice: {choice}")
+
+
 # --- State management ---
 
 
@@ -282,13 +310,33 @@ def sync(
         "--parse-only",
         help="Parse export and print summary without importing",
     ),
+    workspace: str = typer.Option(
+        None,
+        "--workspace",
+        envvar="NUCLINO_WORKSPACE_ID",
+        help="Nuclino workspace name or ID",
+    ),
 ) -> None:
     """Sync Apple Notes export to Nuclino."""
     if parse_only:
         run_parse_only(export_dir)
-    else:
-        typer.echo("Import not yet implemented (Phase 2+)")
+        return
+
+    # API key from env (required for import)
+    api_key = os.environ.get("NUCLINO_API_KEY")
+    if not api_key:
+        typer.echo("Error: NUCLINO_API_KEY environment variable is required.")
         raise typer.Exit(1)
+
+    if not workspace:
+        typer.echo(
+            "Error: --workspace is required. Set NUCLINO_WORKSPACE_ID or pass --workspace."
+        )
+        raise typer.Exit(1)
+
+    client = make_nuclino_client(api_key)
+    workspace_id = resolve_workspace(client, workspace)
+    typer.echo(f"Import not yet implemented (Phase 2 Plan 02). Workspace: {workspace_id}")
 
 
 if __name__ == "__main__":
