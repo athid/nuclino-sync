@@ -443,6 +443,17 @@ def run_import(
         f"See nuclino-state.json for details."
     )
 
+    # Post-run failure summary (CFG-04)
+    failed_items = [
+        (path, entry.get("error", "unknown"))
+        for path, entry in state["items"].items()
+        if entry.get("status") == "failed"
+    ]
+    if failed_items:
+        typer.echo("Failed notes:")
+        for path, error in failed_items:
+            typer.echo(f"  - {path}: {error}")
+
 
 # --- Parse-only command ---
 

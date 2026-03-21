@@ -566,3 +566,33 @@ class TestDryRun:
         output = capsys.readouterr().out
 
         assert "skip (already imported): Note" in output
+
+
+# --- Post-run failure summary (CFG-04) ---
+
+
+class TestFailureSummary:
+    @patch("sync.save_state")
+    @patch("sync.api_request")
+    def test_run_import_failure_summary(self, mock_api, mock_save, sample_export, capsys):
+        """After import, failed notes are printed to stdout with path and error."""
+        def side_effect(client, method, path, **kwargs):
+            json_data = kwargs.get("json", {})
+            if json_data.get("object") == "collection":
+                return {"id": "col-1"}
+            # Fail all item creations
+            response = MagicMock()
+            response.status_code = 500
+            raise httpx.HTTPStatusError(
+                "Server error", request=MagicMock(), response=response,
+            )
+
+        mock_api.side_effect = side_effect
+
+        client = MagicMock()
+        run_import(sample_export, "ws-1", client)
+
+        output = capsys.readouterr().out
+        assert "Failed notes:" in output
+        # At least one note path should appear in failure output
+        assert "iCloud/Notes/" in output
