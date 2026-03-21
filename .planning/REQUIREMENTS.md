@@ -18,8 +18,8 @@
 - [x] **API-01**: Script authenticates using `Authorization: ApiKey <key>` header; key read from `NUCLINO_API_KEY` env var
 - [x] **API-02**: Script self-throttles to ≤4 req/s and implements exponential backoff on 429 responses
 - [x] **API-03**: Script resolves target workspace by name or ID from env var or CLI flag
-- [ ] **API-04**: Script creates collections for each Notes folder, using idempotent check-before-create (keyed on `account/folder` path)
-- [ ] **API-05**: Script creates a Nuclino item per note with the cleaned markdown body
+- [x] **API-04**: Script creates collections for each Notes folder, using idempotent check-before-create (keyed on `account/folder` path)
+- [x] **API-05**: Script creates a Nuclino item per note with the cleaned markdown body
 - [x] **API-06**: Script serializes unmappable frontmatter fields (`created`, `modified`, and any tags if present) into a metadata block appended to item body — no silent loss
 
 ### Attachments
@@ -82,8 +82,8 @@
 | API-01 | Phase 2 | Complete |
 | API-02 | Phase 2 | Complete |
 | API-03 | Phase 2 | Complete |
-| API-04 | Phase 2 | Pending |
-| API-05 | Phase 2 | Pending |
+| API-04 | Phase 2 | Complete |
+| API-05 | Phase 2 | Complete |
 | API-06 | Phase 2 | Complete |
 | ATT-01 | Phase 3 | Pending |
 | ATT-02 | Phase 3 | Pending |
