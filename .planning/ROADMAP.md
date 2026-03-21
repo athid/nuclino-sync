@@ -12,7 +12,7 @@
 - [ ] **Phase 1: Foundation** — Parse Apple Notes export into validated in-memory notes; state management for idempotency
 - [x] **Phase 2: Import Core** — Nuclino API client with backoff; workspace/collection resolution; note item creation with metadata footer (completed 2026-03-21)
 - [x] **Phase 3: Attachments & CLI** — File upload to Nuclino; CLI flags and env var config; per-item error isolation (completed 2026-03-21)
-- [ ] **Phase 4: Hardening** — Dry-run output polish; edge case handling; README with usage examples
+- [x] **Phase 4: Hardening** — Dry-run output polish; edge case handling; README with usage examples (completed 2026-03-21)
 
 ---
 
@@ -96,7 +96,7 @@ Plans:
 3. Collection names containing special characters (e.g. `/`, `&`) are handled without a crash or a malformed API request
 4. The README contains a minimal working example: install, set env vars, run, verify output
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 04-01-PLAN.md — Hardening code changes: dry-run pre-flight summary, empty note placeholder import, collection name sanitization + tests
@@ -111,7 +111,7 @@ Plans:
 | 1. Foundation | 0/2 | Planned | - |
 | 2. Import Core | 0/? | Complete    | 2026-03-21 |
 | 3. Attachments & CLI | 0/2 | Complete    | 2026-03-21 |
-| 4. Hardening | 0/2 | Not started | - |
+| 4. Hardening | 0/2 | Complete    | 2026-03-21 |
 
 ---
 
