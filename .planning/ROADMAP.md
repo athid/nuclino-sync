@@ -88,7 +88,7 @@ Plans:
 
 **Depends on**: Phase 3
 
-**Requirements**: *(no new v1 requirements — this phase validates and hardens Phases 1–3)*
+**Requirements**: *(no new v1 requirements — this phase validates and hardens Phases 1-3)*
 
 **Success Criteria** (what must be TRUE):
 1. `--dry-run` prints a pre-flight summary: note count, attachment count, what metadata will be serialized into bodies, and what will be lost — before making any API calls
@@ -96,7 +96,11 @@ Plans:
 3. Collection names containing special characters (e.g. `/`, `&`) are handled without a crash or a malformed API request
 4. The README contains a minimal working example: install, set env vars, run, verify output
 
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Hardening code changes: dry-run pre-flight summary, empty note placeholder import, collection name sanitization + tests
+- [ ] 04-02-PLAN.md — README.md with minimal working example
 
 ---
 
@@ -107,7 +111,7 @@ Plans:
 | 1. Foundation | 0/2 | Planned | - |
 | 2. Import Core | 0/? | Complete    | 2026-03-21 |
 | 3. Attachments & CLI | 0/2 | Complete    | 2026-03-21 |
-| 4. Hardening | 0/? | Not started | - |
+| 4. Hardening | 0/2 | Not started | - |
 
 ---
 
@@ -158,4 +162,4 @@ Reference: https://help.nuclino.com/d3a29686-api
 ---
 
 *Roadmap created: 2026-03-21*
-*Last updated: 2026-03-21 after Phase 3 planning*
+*Last updated: 2026-03-21 after Phase 4 planning*
