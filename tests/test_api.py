@@ -163,6 +163,44 @@ class TestEnsureCollection:
 
     @patch("sync.save_state")
     @patch("sync.api_request")
+    def test_sanitizes_title_in_api_call(self, mock_api, mock_save):
+        """API call uses sanitized title, state key uses original."""
+        import sync
+        sync._sanitized_warnings.clear()
+
+        mock_api.return_value = {"id": "col-1"}
+        state = {"version": 1, "items": {}}
+        state_path = Path("/tmp/state.json")
+        client = MagicMock()
+
+        ensure_collection(client, "ws-1", "A/B", "Notes", state, state_path)
+
+        # First API call (account-level) should use sanitized title
+        first_call = mock_api.call_args_list[0]
+        assert first_call[1]["json"]["title"] == "A - B"
+
+        # State key should use original unsanitized name
+        assert "A/B" in state["collections"]
+
+    @patch("sync.save_state")
+    @patch("sync.api_request")
+    def test_sanitize_warning_logged(self, mock_api, mock_save, capsys):
+        """Warning is logged when collection name is sanitized."""
+        import sync
+        sync._sanitized_warnings.clear()
+
+        mock_api.return_value = {"id": "col-1"}
+        state = {"version": 1, "items": {}}
+        state_path = Path("/tmp/state.json")
+        client = MagicMock()
+
+        ensure_collection(client, "ws-1", "A/B", "Notes", state, state_path)
+
+        output = capsys.readouterr().out
+        assert "Warning: collection name sanitized" in output
+
+    @patch("sync.save_state")
+    @patch("sync.api_request")
     def test_cross_account_keys(self, mock_api, mock_save):
         # Both accounts have "Notes" folder but should be separate keys
         call_count = [0]
@@ -281,6 +319,58 @@ class TestRunImport:
         # Empty.md now gets imported with placeholder instead of being skipped
         assert "Imported 3 notes." in output
         assert "0 failed." in output
+
+    @patch("sync.save_state")
+    @patch("sync.api_request")
+    def test_empty_note_placeholder(self, mock_api, mock_save, sample_export, capsys):
+        """Empty notes are imported with placeholder content containing '*(empty note)*'."""
+        call_count = [0]
+
+        def side_effect(client, method, path, **kwargs):
+            call_count[0] += 1
+            return {"id": f"item-{call_count[0]}"}
+
+        mock_api.side_effect = side_effect
+
+        client = MagicMock()
+        run_import(sample_export, "ws-1", client)
+
+        # Find the API call that created the Empty note
+        empty_calls = [
+            c for c in mock_api.call_args_list
+            if c[1].get("json", {}).get("object") == "item"
+            and c[1].get("json", {}).get("title") == "Empty"
+        ]
+        assert len(empty_calls) == 1
+        content = empty_calls[0][1]["json"]["content"]
+        assert "*(empty note)*" in content
+
+    @patch("sync.save_state")
+    @patch("sync.api_request")
+    def test_empty_note_state_imported(self, mock_api, mock_save, sample_export):
+        """Empty note gets status 'imported' not 'skipped_empty'."""
+        call_count = [0]
+
+        def side_effect(client, method, path, **kwargs):
+            call_count[0] += 1
+            return {"id": f"item-{call_count[0]}"}
+
+        mock_api.side_effect = side_effect
+
+        client = MagicMock()
+        run_import(sample_export, "ws-1", client)
+
+        # Find the state save call containing the Empty.md entry
+        empty_states = []
+        for c in mock_save.call_args_list:
+            state = c[0][0]
+            for key, val in state.get("items", {}).items():
+                if isinstance(val, dict) and "Empty" in key:
+                    empty_states.append(val)
+
+        assert len(empty_states) > 0
+        # The final state for Empty.md should be 'imported'
+        assert empty_states[-1]["status"] == "imported"
 
 
 # --- Attachment upload ---
@@ -517,8 +607,9 @@ class TestDryRun:
         # Should list the two canonical notes with content
         assert "iCloud/Notes/Note" in output
         assert "iCloud/Notes/My-Note" in output
-        # Empty note should be skipped, not listed as "import:"
-        assert "import:" in output
+        # Empty note shows as placeholder import, not skip
+        assert "import (empty" in output
+        assert "placeholder" in output
         # Note has a sibling attachment dir with 1 file
         assert "[1 attachments]" in output
 
@@ -566,6 +657,25 @@ class TestDryRun:
         output = capsys.readouterr().out
 
         assert "skip (already imported): Note" in output
+
+    def test_dry_run_preflight_summary(self, sample_export, capsys):
+        """Dry-run prints pre-flight summary block with counts and metadata info."""
+        run_dry_run(sample_export)
+        output = capsys.readouterr().out
+
+        assert "Pre-flight summary:" in output
+        assert "Notes to import:" in output
+        assert "Attachments:" in output
+        assert "Metadata footer:" in output
+        assert "Lost fields:" in output
+
+    def test_dry_run_empty_shows_placeholder_line(self, sample_export, capsys):
+        """Empty notes show as 'import (empty -> placeholder)' in dry-run output."""
+        run_dry_run(sample_export)
+        output = capsys.readouterr().out
+
+        assert "import (empty" in output
+        assert "placeholder): Empty" in output
 
 
 # --- Post-run failure summary (CFG-04) ---

@@ -10,6 +10,7 @@ from sync import (
     is_canonical,
     parse_apple_date,
     parse_note,
+    sanitize_collection_name,
 )
 
 
@@ -143,3 +144,23 @@ class TestCleanBody:
     def test_clean_body_whitespace_only(self):
         result = clean_body("   \n  ", "Test Note")
         assert result == "   \n  "
+
+
+# --- sanitize_collection_name tests ---
+
+
+class TestSanitizeCollectionName:
+    def test_sanitize_slash(self):
+        assert sanitize_collection_name("A/B") == "A - B"
+
+    def test_sanitize_ampersand(self):
+        assert sanitize_collection_name("R & D") == "R and D"
+
+    def test_sanitize_combined(self):
+        assert sanitize_collection_name("A/B & C") == "A - B and C"
+
+    def test_sanitize_noop(self):
+        assert sanitize_collection_name("Normal") == "Normal"
+
+    def test_sanitize_control_chars(self):
+        assert sanitize_collection_name("abc\x00def") == "abcdef"
