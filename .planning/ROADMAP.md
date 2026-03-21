@@ -33,7 +33,11 @@
 4. Interrupting the script mid-run and re-running it skips already-imported items without creating duplicates
 5. A crash or `Ctrl-C` during a state write leaves the previous valid `state.json` intact (no truncation)
 
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Project scaffold + sync.py with all parsing, state, and CLI functions
+- [ ] 01-02-PLAN.md — Pytest test suite for parsing and state management
 
 ---
 
@@ -96,7 +100,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/? | Not started | - |
+| 1. Foundation | 0/2 | Planned | - |
 | 2. Import Core | 0/? | Not started | - |
 | 3. Attachments & CLI | 0/? | Not started | - |
 | 4. Hardening | 0/? | Not started | - |
@@ -150,4 +154,4 @@ Reference: https://help.nuclino.com/d3a29686-api
 ---
 
 *Roadmap created: 2026-03-21*
-*Last updated: 2026-03-21 after initial creation*
+*Last updated: 2026-03-21 after Phase 1 planning*
