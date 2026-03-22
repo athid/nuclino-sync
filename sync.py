@@ -103,19 +103,34 @@ def parse_apple_date(value: str) -> datetime:
 
 def parse_note(note_file: NoteFile) -> ParsedNote:
     """Parse a single .md file into structured note data."""
-    post = frontmatter.load(str(note_file.md_path))
-    title = post.get("title", note_file.md_path.stem)
+    try:
+        post = frontmatter.load(str(note_file.md_path))
+        metadata = post.metadata
+        body = post.content
+    except Exception:
+        # Malformed YAML frontmatter (e.g. unquoted colon in title) — treat entire
+        # file as plain body with no metadata.
+        raw_text = note_file.md_path.read_text(encoding="utf-8")
+        # Strip the frontmatter delimiters so they don't appear in the note body
+        if raw_text.startswith("---"):
+            parts = raw_text.split("---", 2)
+            body = parts[2].lstrip("\n") if len(parts) >= 3 else raw_text
+        else:
+            body = raw_text
+        metadata = {}
+
+    title = str(metadata.get("title") or note_file.md_path.stem)
     title = unicodedata.normalize("NFC", title)
 
     created = None
-    if raw := post.get("created"):
+    if raw := metadata.get("created"):
         try:
             created = parse_apple_date(raw)
         except (ValueError, TypeError):
             pass
 
     modified = None
-    if raw := post.get("modified"):
+    if raw := metadata.get("modified"):
         try:
             modified = parse_apple_date(raw)
         except (ValueError, TypeError):
@@ -123,7 +138,7 @@ def parse_note(note_file: NoteFile) -> ParsedNote:
 
     return ParsedNote(
         title=title,
-        body=post.content,
+        body=body,
         created=created,
         modified=modified,
         attachment_dir=note_file.attachment_dir,
@@ -190,7 +205,7 @@ def api_request(client: httpx.Client, method: str, path: str, **kwargs) -> dict:
 def make_nuclino_client(api_key: str) -> httpx.Client:
     """Create an httpx Client configured for the Nuclino API."""
     return httpx.Client(
-        headers={"Authorization": api_key, "Content-Type": "application/json"},
+        headers={"Authorization": api_key},
         timeout=httpx.Timeout(connect=5.0, read=30.0, write=30.0, pool=5.0),
     )
 
@@ -272,6 +287,11 @@ def ensure_collection(
 # --- Attachment upload ---
 
 
+IMAGE_EXTENSIONS = frozenset(
+    (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".heic", ".heif")
+)
+
+
 def upload_attachments(
     client: httpx.Client,
     item_id: str,
@@ -280,56 +300,69 @@ def upload_attachments(
     state: dict,
     state_path: Path,
 ) -> None:
-    """Upload attachments for an item. Failures are isolated per-file."""
+    """Upload attachments and clean broken local refs. Upload is best-effort."""
     global _upload_not_supported
-    if _upload_not_supported:
-        return
 
     attachment_failures: list[dict] = []
-    attachment_links: list[str] = []
+    # Map local filename -> permanent URL for inline reference rewriting
+    uploaded: dict[str, str] = {}
 
-    for file_path in sorted(attachment_dir.iterdir()):
-        if not file_path.is_file():
-            continue
-        try:
-            with open(file_path, "rb") as f:
-                _throttle()
-                resp = client.post(
-                    f"{NUCLINO_BASE}/v0/files",
-                    data={"itemId": item_id},
-                    files={"file": (file_path.name, f)},
-                    headers={"Content-Type": None},
-                )
-                if resp.status_code in (404, 405):
-                    _upload_not_supported = True
-                    typer.echo(
-                        "Warning: File upload not supported by Nuclino API. "
-                        "Skipping all attachment uploads."
+    if not _upload_not_supported:
+        for file_path in sorted(attachment_dir.iterdir()):
+            if not file_path.is_file():
+                continue
+            try:
+                with open(file_path, "rb") as f:
+                    _throttle()
+                    resp = client.post(
+                        f"{NUCLINO_BASE}/v0/files",
+                        data={"itemId": item_id},
+                        files={"file": (file_path.name, f)},
                     )
-                    return
-                resp.raise_for_status()
-                file_data = resp.json()["data"]
+                    if resp.status_code in (404, 405):
+                        _upload_not_supported = True
+                        typer.echo(
+                            "Warning: File upload not supported by Nuclino API. "
+                            "Inline image references will be removed."
+                        )
+                        break
+                    resp.raise_for_status()
+                    file_data = resp.json()["data"]
 
-            file_id = file_data.get("id", "")
-            file_name = file_path.name
-            permanent_url = f"https://files.nuclino.com/files/{file_id}/{file_name}"
+                file_id = file_data.get("id", "")
+                file_name = file_path.name
+                permanent_url = f"https://files.nuclino.com/files/{file_id}/{file_name}"
+                uploaded[file_name] = permanent_url
 
-            if file_name.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg")):
-                attachment_links.append(f"![{file_name}]({permanent_url})")
+            except Exception as e:
+                attachment_failures.append({"file": file_path.name, "error": str(e)})
+
+    # Always fetch current content to rewrite references and strip broken local refs
+    item_data = api_request(client, "GET", f"/v0/items/{item_id}")
+    content = item_data.get("content", "")
+    original_content = content
+
+    # Rewrite inline references for successfully uploaded files
+    inlined: set[str] = set()
+    for file_name, permanent_url in uploaded.items():
+        local_ref = f"{attachment_dir.name}/{file_name}"
+        if local_ref in content:
+            content = content.replace(f"]({local_ref})", f"]({permanent_url})")
+            inlined.add(file_name)
+
+    # Append links for uploaded files not referenced inline
+    orphan_links = []
+    for file_name, permanent_url in uploaded.items():
+        if file_name not in inlined:
+            if file_name.lower().endswith(tuple(IMAGE_EXTENSIONS)):
+                orphan_links.append(f"![{file_name}]({permanent_url})")
             else:
-                attachment_links.append(f"[{file_name}]({permanent_url})")
+                orphan_links.append(f"[{file_name}]({permanent_url})")
+    if orphan_links:
+        content += "\n\n" + "\n".join(orphan_links)
 
-        except Exception as e:
-            attachment_failures.append({"file": file_path.name, "error": str(e)})
-
-    # Update item content with attachment links (GET then PUT)
-    if attachment_links:
-        item_data = api_request(client, "GET", f"/v0/items/{item_id}")
-        current_content = item_data.get("content", "")
-        links_block = "\n\n" + "\n".join(attachment_links)
-        api_request(client, "PUT", f"/v0/items/{item_id}", json={
-            "content": current_content + links_block,
-        })
+    if content != original_content:
+        api_request(client, "PUT", f"/v0/items/{item_id}", json={"content": content})
 
     # Record failures in state
     if attachment_failures:
@@ -382,8 +415,28 @@ def run_import(
         for note_file in notes:
             rel_path = str(note_file.md_path.relative_to(export_dir))
 
-            # Skip already-imported items (idempotent)
+            # Skip already-imported items (idempotent), but retry failed attachments
             if rel_path in state["items"] and state["items"][rel_path].get("status") == "imported":
+                state_entry = state["items"][rel_path]
+                if state_entry.get("attachment_failures"):
+                    item_id = state_entry["nuclino_item_id"]
+                    state_entry.pop("attachment_failures")
+                    try:
+                        if note_file.attachment_dir:
+                            upload_attachments(
+                                client, item_id,
+                                note_file.attachment_dir,
+                                state_entry,
+                                state, state_path,
+                            )
+                        else:
+                            # Attachment dir gone — nothing to upload, leave refs as-is
+                            pass
+                    except Exception as e:
+                        state_entry.setdefault("attachment_failures", []).append(
+                            {"file": "*", "error": f"Unexpected: {str(e)}"}
+                        )
+                    save_state(state, state_path)
                 progress.advance(task)
                 continue
 
@@ -621,6 +674,54 @@ def run_dry_run(export_dir: Path) -> None:
 app = typer.Typer()
 
 
+def run_repair_attachments(
+    export_dir: Path,
+    workspace_id: str,
+    client: httpx.Client,
+) -> None:
+    """Re-upload attachments and rewrite/clean content for all imported notes."""
+    state_path = export_dir / "nuclino-state.json"
+    state = load_state(state_path)
+
+    notes, _ = discover_notes(export_dir)
+    note_map = {
+        str(nf.md_path.relative_to(export_dir)): nf for nf in notes
+    }
+
+    repaired = 0
+    failed = 0
+
+    for rel_path, entry in state["items"].items():
+        if entry.get("status") != "imported":
+            continue
+        note_file = note_map.get(rel_path)
+        if not note_file or not note_file.attachment_dir:
+            continue
+
+        item_id = entry.get("nuclino_item_id")
+        if not item_id:
+            continue
+
+        typer.echo(f"  repairing: {entry.get('title', rel_path)}")
+        entry.pop("attachment_failures", None)
+        try:
+            upload_attachments(
+                client, item_id,
+                note_file.attachment_dir,
+                entry,
+                state, state_path,
+            )
+            repaired += 1
+        except Exception as e:
+            entry.setdefault("attachment_failures", []).append(
+                {"file": "*", "error": f"Unexpected: {str(e)}"}
+            )
+            failed += 1
+        save_state(state, state_path)
+
+    typer.echo(f"Repaired {repaired} notes. {failed} failed.")
+
+
 @app.command()
 def sync(
     export_dir: Path = typer.Option(
@@ -637,6 +738,11 @@ def sync(
         False,
         "--dry-run",
         help="Preview what would be imported without making API calls",
+    ),
+    repair_attachments: bool = typer.Option(
+        False,
+        "--repair-attachments",
+        help="Re-upload attachments and fix broken inline references for all imported notes",
     ),
     workspace: str = typer.Option(
         None,
@@ -668,6 +774,11 @@ def sync(
 
     client = make_nuclino_client(api_key)
     workspace_id = resolve_workspace(client, workspace)
+
+    if repair_attachments:
+        run_repair_attachments(export_dir, workspace_id, client)
+        return
+
     run_import(export_dir, workspace_id, client)
 
 
